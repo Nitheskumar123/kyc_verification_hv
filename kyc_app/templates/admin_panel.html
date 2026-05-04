@@ -1,0 +1,379 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-shield-alt text-primary"></i> KYC Admin Panel</h2>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary" onclick="expandAllUsers()">
+                <i class="fas fa-expand-alt"></i> Expand All
+            </button>
+            <button class="btn btn-outline-secondary" onclick="collapseAllUsers()">
+                <i class="fas fa-compress-alt"></i> Collapse All
+            </button>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4>{{ total_stats.total_users }}</h4>
+                            <p class="mb-0">Total Users</p>
+                        </div>
+                        <i class="fas fa-users fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4>{{ total_stats.pending_documents|add:total_stats.pending_faces }}</h4>
+                            <p class="mb-0">Pending Reviews</p>
+                        </div>
+                        <i class="fas fa-clock fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4>{{ total_stats.verified_documents|add:total_stats.verified_faces }}</h4>
+                            <p class="mb-0">Verified</p>
+                        </div>
+                        <i class="fas fa-check-circle fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4>{{ total_stats.total_documents|add:total_stats.total_faces }}</h4>
+                            <p class="mb-0">Total Submissions</p>
+                        </div>
+                        <i class="fas fa-file-alt fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search and Filter -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <input type="text" id="searchUsers" class="form-control" placeholder="Search users by name or email...">
+                </div>
+                <div class="col-md-3">
+                    <select id="statusFilter" class="form-control">
+                        <option value="">All Statuses</option>
+                        <option value="pending">Pending</option>
+                        <option value="verified">Verified</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select id="typeFilter" class="form-control">
+                        <option value="">All Types</option>
+                        <option value="documents">Documents Only</option>
+                        <option value="faces">Faces Only</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Directory -->
+    <div class="card">
+        <div class="card-header">
+            <h5><i class="fas fa-folder-open"></i> User Submissions Directory</h5>
+        </div>
+        <div class="card-body p-0">
+            {% if user_submissions %}
+                {% for user_data in user_submissions %}
+                <div class="user-section border-bottom" data-user-id="{{ user_data.user.id }}">
+                    <!-- User Header -->
+                    <div class="user-header p-3 bg-light cursor-pointer" onclick="toggleUserSection({{ user_data.user.id }})">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-chevron-right toggle-icon me-2" id="toggle-{{ user_data.user.id }}"></i>
+                                <div class="user-avatar bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+                                    {{ user_data.user.first_name|first|upper }}{{ user_data.user.last_name|first|upper }}
+                                </div>
+                                <div>
+                                    <h6 class="mb-0">{{ user_data.user.get_full_name|default:user_data.user.username }}</h6>
+                                    <small class="text-muted">{{ user_data.user.email }}</small>
+                                </div>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <span class="badge bg-secondary">
+                                    <i class="fas fa-file-alt"></i> {{ user_data.stats.total_documents }}
+                                </span>
+                                <span class="badge bg-info">
+                                    <i class="fas fa-user-circle"></i> {{ user_data.stats.total_faces }}
+                                </span>
+                                {% if user_data.stats.pending_documents > 0 or user_data.stats.pending_faces > 0 %}
+                                    <span class="badge bg-warning text-dark">
+                                        <i class="fas fa-clock"></i> {{ user_data.stats.pending_documents|add:user_data.stats.pending_faces }} Pending
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- User Content -->
+                    <div class="user-content collapse" id="content-{{ user_data.user.id }}">
+                        <div class="p-3">
+                            {% if user_data.documents %}
+                            <div class="mb-4">
+                                <div class="d-flex align-items-center mb-3">
+                                    <i class="fas fa-folder text-warning me-2"></i>
+                                    <h6 class="mb-0">Documents ({{ user_data.documents|length }})</h6>
+                                </div>
+                                <div class="row">
+                                    {% for doc in user_data.documents %}
+                                    <div class="col-lg-6 mb-3">
+                                        <div class="card h-100 {% if doc.status == 'pending' %}border-warning{% elif doc.status == 'verified' %}border-success{% else %}border-danger{% endif %}">
+                                            <div class="card-header p-2 bg-transparent">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <small class="fw-bold">{{ doc.get_document_type_display }}</small>
+                                                    <span class="badge 
+                                                        {% if doc.status == 'pending' %}bg-warning text-dark
+                                                        {% elif doc.status == 'verified' %}bg-success
+                                                        {% else %}bg-danger{% endif %}">
+                                                        {{ doc.get_status_display }}
+                                                    </span>
+                                                </div>
+                                                <small class="text-muted">{{ doc.created_at|date:"M d, Y H:i" }}</small>
+                                            </div>
+                                            <div class="card-body p-2">
+                                                <div class="text-center mb-2">
+                                                    <img src="{{ doc.document_image.url }}" class="img-thumbnail" style="max-height: 120px; max-width: 100%;" alt="Document">
+                                                </div>
+                                                <div class="row text-center">
+                                                    <div class="col-4">
+                                                        <small class="d-block text-muted">Clear</small>
+                                                        <i class="fas {% if doc.is_clear %}fa-check text-success{% else %}fa-times text-danger{% endif %}"></i>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <small class="d-block text-muted">Valid Type</small>
+                                                        <i class="fas {% if doc.is_valid_type %}fa-check text-success{% else %}fa-times text-danger{% endif %}"></i>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <small class="d-block text-muted">Actions</small>
+                                                        <div class="btn-group-vertical" role="group">
+                                                            <form method="post">
+                                                                {% csrf_token %}
+                                                                <input type="hidden" name="id" value="{{ doc.id }}">
+                                                                <input type="hidden" name="type" value="document">
+                                                                {% if doc.status != 'verified' %}
+                                                                    <button name="action" value="verified" class="btn btn-success btn-sm mb-1" title="Verify">
+                                                                        <i class="fas fa-check"></i>
+                                                                    </button>
+                                                                {% endif %}
+                                                                {% if doc.status != 'rejected' %}
+                                                                    <button name="action" value="rejected" class="btn btn-danger btn-sm" title="Reject">
+                                                                        <i class="fas fa-times"></i>
+                                                                    </button>
+                                                                {% endif %}
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            {% if user_data.face_verifications %}
+                            <div>
+                                <div class="d-flex align-items-center mb-3">
+                                    <i class="fas fa-folder text-info me-2"></i>
+                                    <h6 class="mb-0">Face Verifications ({{ user_data.face_verifications|length }})</h6>
+                                </div>
+                                <div class="row">
+                                    {% for face in user_data.face_verifications %}
+                                    <div class="col-lg-6 mb-3">
+                                        <div class="card h-100 {% if face.status == 'pending' %}border-warning{% elif face.status == 'verified' %}border-success{% else %}border-danger{% endif %}">
+                                            <div class="card-header p-2 bg-transparent">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <small class="fw-bold">Face Verification</small>
+                                                    <span class="badge 
+                                                        {% if face.status == 'pending' %}bg-warning text-dark
+                                                        {% elif face.status == 'verified' %}bg-success
+                                                        {% else %}bg-danger{% endif %}">
+                                                        {{ face.get_status_display }}
+                                                    </span>
+                                                </div>
+                                                <small class="text-muted">{{ face.created_at|date:"M d, Y H:i" }}</small>
+                                            </div>
+                                            <div class="card-body p-2">
+                                                <div class="text-center mb-2">
+                                                    <img src="{{ face.face_image.url }}" class="img-thumbnail rounded-circle" style="height: 120px; width: 120px; object-fit: cover;" alt="Face">
+                                                </div>
+                                                <div class="row text-center">
+                                                    <div class="col-4">
+                                                        <small class="d-block text-muted">Liveness</small>
+                                                        <i class="fas {% if face.is_live %}fa-check text-success{% else %}fa-times text-danger{% endif %}"></i>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <small class="d-block text-muted">Confidence</small>
+                                                        <span class="badge 
+                                                            {% if face.confidence_score >= 0.8 %}bg-success
+                                                            {% elif face.confidence_score >= 0.5 %}bg-warning text-dark
+                                                            {% else %}bg-danger{% endif %}">
+                                                            {{ face.confidence_score|floatformat:2 }}
+                                                        </span>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <small class="d-block text-muted">Actions</small>
+                                                        <div class="btn-group-vertical" role="group">
+                                                            <form method="post">
+                                                                {% csrf_token %}
+                                                                <input type="hidden" name="id" value="{{ face.id }}">
+                                                                <input type="hidden" name="type" value="face">
+                                                                {% if face.status != 'verified' %}
+                                                                    <button name="action" value="verified" class="btn btn-success btn-sm mb-1" title="Verify">
+                                                                        <i class="fas fa-check"></i>
+                                                                    </button>
+                                                                {% endif %}
+                                                                {% if face.status != 'rejected' %}
+                                                                    <button name="action" value="rejected" class="btn btn-danger btn-sm" title="Reject">
+                                                                        <i class="fas fa-times"></i>
+                                                                    </button>
+                                                                {% endif %}
+                                                            </form>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="text-center p-5">
+                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No KYC submissions yet</h5>
+                    <p class="text-muted">Users haven't submitted any documents or face verifications.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- CSS -->
+<style>
+@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css');
+
+/* Main container */
+.container-fluid { padding: 20px; }
+
+/* Card styling */
+.card { border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); transition: all 0.3s ease; }
+.card:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
+
+/* User section */
+.user-section { border-bottom: 1px solid #e9ecef; }
+.user-header { transition: background-color 0.3s ease; cursor: pointer; }
+.user-header:hover { background-color: #f1f3f4 !important; }
+
+/* Avatar */
+.user-avatar { min-width: 40px; font-size: 16px; font-weight: bold; }
+
+/* Toggle */
+.toggle-icon { transition: transform 0.3s ease; color: #6c757d; }
+.toggle-icon.rotated { transform: rotate(90deg); color: #495057; }
+
+/* Collapsible */
+.user-content.collapse:not(.show) { display: none; }
+.user-content.collapse.show { display: block; animation: fadeIn 0.3s ease-in-out; }
+
+/* Card borders */
+.card.border-warning { border-left: 4px solid #ffc107 !important; }
+.card.border-success { border-left: 4px solid #28a745 !important; }
+.card.border-danger { border-left: 4px solid #dc3545 !important; }
+
+/* Badges */
+.badge { font-size: 0.75rem; padding: 0.375rem 0.75rem; }
+.badge.bg-warning { color: #212529 !important; }
+
+/* Images */
+.img-thumbnail { border-radius: 8px; transition: transform 0.3s ease; }
+.img-thumbnail:hover { transform: scale(1.05); }
+.rounded-circle.img-thumbnail { object-fit: cover; }
+
+/* Buttons */
+.btn-sm { padding: 0.25rem 0.5rem; font-size: 0.875rem; border-radius: 4px; }
+.btn-group-vertical .btn + .btn { margin-top: 2px; }
+
+/* Responsive */
+@media (max-width: 992px) {
+    .col-lg-6 { margin-bottom: 1rem; }
+}
+@media (max-width: 768px) {
+    .container-fluid { padding: 10px; }
+    .user-avatar { width: 35px; height: 35px; font-size: 14px; }
+    .badge { font-size: 0.7rem; padding: 0.25rem 0.5rem; }
+}
+
+/* Animation */
+@keyframes fadeIn { from {opacity:0; transform:translateY(10px);} to {opacity:1; transform:translateY(0);} }
+</style>
+
+<script>
+function toggleUserSection(userId) {
+    const content = document.getElementById(`content-${userId}`);
+    const icon = document.getElementById(`toggle-${userId}`);
+    if (content.classList.contains('show')) {
+        content.classList.remove('show');
+        icon.classList.remove('rotated');
+    } else {
+        content.classList.add('show');
+        icon.classList.add('rotated');
+    }
+}
+function expandAllUsers() {
+    document.querySelectorAll('.user-content').forEach(c => c.classList.add('show'));
+    document.querySelectorAll('.toggle-icon').forEach(i => i.classList.add('rotated'));
+}
+function collapseAllUsers() {
+    document.querySelectorAll('.user-content').forEach(c => c.classList.remove('show'));
+    document.querySelectorAll('.toggle-icon').forEach(i => i.classList.remove('rotated'));
+}
+document.getElementById('searchUsers').addEventListener('input', function(e) {
+    const term = e.target.value.toLowerCase();
+    document.querySelectorAll('.user-section').forEach(section => {
+        const name = section.querySelector('.user-header h6').textContent.toLowerCase();
+        const email = section.querySelector('.user-header small').textContent.toLowerCase();
+        section.style.display = (name.includes(term) || email.includes(term)) ? 'block' : 'none';
+    });
+});
+setInterval(function() {
+    if (document.querySelector('.badge.bg-warning')) { location.reload(); }
+}, 30000);
+</script>
+{% endblock %}

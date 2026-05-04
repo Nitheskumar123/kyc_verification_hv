@@ -1,0 +1,221 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-header">
+                <h3>Upload KYC Documents</h3>
+            </div>
+            <div class="card-body">
+                <div class="clear-requirements">
+                    <h5>📋 Requirements for clear document:</h5>
+                    <ul>
+                        <li>✅ All text should be clearly readable</li>
+                        <li>✅ Document should be well-lit</li>
+                        <li>✅ No blur or shadows</li>
+                        <li>✅ Upload the correct document type</li>
+                    </ul>
+                </div>
+
+                <!-- Camera Section -->
+                <div class="camera-section mb-4" id="cameraSection" style="display: none;">
+                    <div class="text-center">
+                        <video id="video" width="400" height="300" autoplay style="border: 2px solid #ccc; border-radius: 10px;"></video>
+                        <canvas id="canvas" width="400" height="300" style="display: none;"></canvas>
+                    </div>
+                    <div class="text-center mt-3">
+                        <button type="button" class="btn btn-success" id="captureBtn">📷 Capture Photo</button>
+                        <button type="button" class="btn btn-secondary" id="retakeBtn" style="display: none;">🔄 Retake</button>
+                        <button type="button" class="btn btn-danger" id="closeCameraBtn">❌ Close Camera</button>
+                    </div>
+                </div>
+
+                <!-- Preview Section -->
+                <div class="preview-section mb-3" id="previewSection" style="display: none;">
+                    <div class="text-center">
+                        <img id="preview" src="" alt="Document Preview" style="max-width: 400px; max-height: 300px; border: 2px solid #28a745; border-radius: 10px;">
+                    </div>
+                </div>
+
+                <form method="post" enctype="multipart/form-data" id="kycForm">
+                    {% csrf_token %}
+                    
+                    <!-- Document Type Selection -->
+                    <div class="form-group">
+                        {{ form.document_type.label_tag }}
+                        {{ form.document_type }}
+                    </div>
+
+                    <!-- File Input with Camera Options -->
+                    <div class="form-group">
+                        <label for="{{ form.document_image.id_for_label }}">Document Image</label>
+                        <div class="input-group">
+                            {{ form.document_image }}
+                            <div class="input-group-append">
+                                <button type="button" class="btn btn-info" id="openCameraBtn">📷 Take Photo</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Upload Document</button>
+                    <a href="{% url 'dashboard' %}" class="btn btn-secondary">Back</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.camera-section {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 10px;
+    border: 2px dashed #007bff;
+}
+
+.preview-section {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 10px;
+    border: 2px solid #28a745;
+}
+
+.input-group .btn {
+    border-radius: 0 4px 4px 0;
+}
+
+#video {
+    background: #000;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+</style>
+
+<script>
+let video = document.getElementById('video');
+let canvas = document.getElementById('canvas');
+let context = canvas.getContext('2d');
+let stream = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    playInstructionForStep('document_upload');
+    
+    // Open Camera
+    document.getElementById('openCameraBtn').addEventListener('click', function() {
+        openCamera();
+    });
+    
+    // Close Camera
+    document.getElementById('closeCameraBtn').addEventListener('click', function() {
+        closeCamera();
+    });
+    
+    // Capture Photo
+    document.getElementById('captureBtn').addEventListener('click', function() {
+        capturePhoto();
+    });
+    
+    // Retake Photo
+    document.getElementById('retakeBtn').addEventListener('click', function() {
+        retakePhoto();
+    });
+    
+    // File input change event
+    document.getElementById('id_document_image').addEventListener('change', function(e) {
+        if (e.target.files && e.target.files[0]) {
+            showFilePreview(e.target.files[0]);
+        }
+    });
+});
+
+async function openCamera() {
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({
+            video: { 
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                facingMode: 'environment' // Use back camera for documents
+            }
+        });
+        
+        video.srcObject = stream;
+        document.getElementById('cameraSection').style.display = 'block';
+        document.getElementById('previewSection').style.display = 'none';
+        
+        // Scroll to camera section
+        document.getElementById('cameraSection').scrollIntoView({ behavior: 'smooth' });
+        
+    } catch (error) {
+        console.error('Error accessing camera:', error);
+        alert('Camera access denied or not available. Please use file upload instead.');
+    }
+}
+
+function closeCamera() {
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+    }
+    document.getElementById('cameraSection').style.display = 'none';
+    video.srcObject = null;
+}
+
+function capturePhoto() {
+    // Draw video frame to canvas
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // Convert canvas to blob and create file
+    canvas.toBlob(function(blob) {
+        const file = new File([blob], 'document_photo.jpg', { type: 'image/jpeg' });
+        
+        // Create a new FileList containing our file
+        const fileList = new DataTransfer();
+        fileList.items.add(file);
+        document.getElementById('id_document_image').files = fileList.files;
+        
+        // Show preview
+        const preview = document.getElementById('preview');
+        preview.src = canvas.toDataURL();
+        document.getElementById('previewSection').style.display = 'block';
+        
+        // Hide camera, show retake button
+        document.getElementById('cameraSection').style.display = 'none';
+        document.getElementById('retakeBtn').style.display = 'inline-block';
+        
+        // Stop camera
+        closeCamera();
+        
+        // Scroll to preview
+        document.getElementById('previewSection').scrollIntoView({ behavior: 'smooth' });
+        
+    }, 'image/jpeg', 0.8);
+}
+
+function retakePhoto() {
+    document.getElementById('previewSection').style.display = 'none';
+    document.getElementById('retakeBtn').style.display = 'none';
+    document.getElementById('id_document_image').value = '';
+    openCamera();
+}
+
+function showFilePreview(file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const preview = document.getElementById('preview');
+        preview.src = e.target.result;
+        document.getElementById('previewSection').style.display = 'block';
+        document.getElementById('retakeBtn').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+}
+
+// Clean up camera when page unloads
+window.addEventListener('beforeunload', function() {
+    closeCamera();
+});
+</script>
+
+{% endblock %}

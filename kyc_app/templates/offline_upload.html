@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-header">
+                <h3>Upload KYC Documents</h3>
+            </div>
+            <div class="card-body">
+                <div class="clear-requirements">
+                    <h5>📋 Requirements for clear document:</h5>
+                    <ul>
+                        <li>✅ All text should be clearly readable</li>
+                        <li>✅ Document should be well-lit</li>
+                        <li>✅ No blur or shadows</li>
+                        <li>✅ Upload the correct document type</li>
+                    </ul>
+                </div>
+
+                <!-- Preview Section -->
+                <div class="preview-section mb-3" id="previewSection" style="display: none;">
+                    <div class="text-center">
+                        <img id="preview" src="" alt="Document Preview" style="max-width: 400px; max-height: 300px; border: 2px solid #28a745; border-radius: 10px;">
+                    </div>
+                </div>
+
+                <form method="post" enctype="multipart/form-data" id="kycForm">
+                    {% csrf_token %}
+                    
+                    <!-- Document Type Selection -->
+                    <div class="form-group">
+                        {{ form.document_type.label_tag }}
+                        {{ form.document_type }}
+                    </div>
+
+                    <!-- File Input -->
+                    <div class="form-group">
+                        <label for="{{ form.document_image.id_for_label }}">Document Image</label>
+                        {{ form.document_image }}
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Upload Document</button>
+                    <a href="{% url 'dashboard' %}" class="btn btn-secondary">Back</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.preview-section {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 10px;
+    border: 2px solid #28a745;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // File input change event
+    document.getElementById('id_document_image').addEventListener('change', function(e) {
+        if (e.target.files && e.target.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const preview = document.getElementById('preview');
+                preview.src = e.target.result;
+                document.getElementById('previewSection').style.display = 'block';
+            };
+            reader.readAsDataURL(e.target.files[0]);
+        }
+    });
+});
+</script>
+
+{% endblock %}

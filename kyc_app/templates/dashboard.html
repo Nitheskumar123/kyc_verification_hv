@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h2>KYC Dashboard</h2>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Document Verification</h4>
+                    </div>
+                    <div class="card-body">
+                        {% if documents %}
+                            {% for doc in documents %}
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span>{{ doc.get_document_type_display }}</span>
+                                    <span class="status-{{ doc.status }}">{{ doc.get_status_display }}</span>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p>No documents uploaded yet.</p>
+                        {% endif %}
+                        <a href="{% url 'kyc_upload' %}" class="btn btn-primary">Upload Documents</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Face Verification</h4>
+                    </div>
+                    <div class="card-body">
+                        {% if face_verifications %}
+                            {% for face in face_verifications %}
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span>Face Verification</span>
+                                    <span class="status-{{ face.status }}">{{ face.get_status_display }}</span>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <p>No face verification completed yet.</p>
+                        {% endif %}
+                        <a href="{% url 'face_verification' %}" class="btn btn-primary">Verify Face</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,276 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-header">
+                <h3>Face Verification</h3>
+            </div>
+            <div class="card-body">
+                <div class="verification-requirements">
+                    <h5>📋 Requirements for face verification:</h5>
+                    <ul>
+                        <li>✅ Look directly at the camera</li>
+                        <li>✅ Ensure good lighting on your face</li>
+                        <li>✅ Remove glasses or hats if possible</li>
+                        <li>✅ Keep face within the frame</li>
+                        <li>✅ Stay still during capture</li>
+                    </ul>
+                </div>
+
+                <!-- Camera Section -->
+                <div class="camera-section mb-4" id="cameraSection" style="display: none;">
+                    <div class="text-center">
+                        <div class="camera-frame">
+                            <video id="video" width="400" height="300" autoplay style="border: 3px solid #007bff; border-radius: 50%; object-fit: cover;"></video>
+                            <div class="face-guide">
+                                <div class="face-outline"></div>
+                            </div>
+                        </div>
+                        <canvas id="canvas" width="400" height="300" style="display: none;"></canvas>
+                    </div>
+                    <div class="text-center mt-3">
+                        <button type="button" class="btn btn-success btn-lg" id="captureBtn">📷 Capture Face</button>
+                        <button type="button" class="btn btn-secondary" id="retakeBtn" style="display: none;">🔄 Retake</button>
+                        <button type="button" class="btn btn-danger" id="closeCameraBtn">❌ Close Camera</button>
+                    </div>
+                    <div class="mt-2 text-center">
+                        <small class="text-muted">Position your face within the oval guide</small>
+                    </div>
+                </div>
+
+                <!-- Preview Section -->
+                <div class="preview-section mb-3" id="previewSection" style="display: none;">
+                    <div class="text-center">
+                        <img id="preview" src="" alt="Face Preview" style="max-width: 300px; max-height: 300px; border: 3px solid #28a745; border-radius: 50%; object-fit: cover;">
+                    </div>
+                </div>
+
+                <form method="post" enctype="multipart/form-data" id="faceForm">
+                    {% csrf_token %}
+                    
+                    <!-- File Input with Camera Options -->
+                    <div class="form-group">
+                        <label for="{{ form.face_image.id_for_label }}">Face Image</label>
+                        <div class="input-group">
+                            {{ form.face_image }}
+                            <div class="input-group-append">
+                                <button type="button" class="btn btn-info" id="openCameraBtn">📷 Take Photo</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Submit Verification</button>
+                    <a href="{% url 'dashboard' %}" class="btn btn-secondary">Back</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.camera-section {
+    background: #f8f9fa;
+    padding: 20px;
+    border-radius: 15px;
+    border: 2px dashed #007bff;
+}
+
+.preview-section {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 15px;
+    border: 2px solid #28a745;
+}
+
+.camera-frame {
+    position: relative;
+    display: inline-block;
+}
+
+.face-guide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+.face-outline {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 250px;
+    height: 200px;
+    border: 3px dashed #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3);
+}
+
+.verification-requirements {
+    background: #e7f3ff;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.input-group .btn {
+    border-radius: 0 4px 4px 0;
+}
+
+#video {
+    background: #000;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+@keyframes pulse {
+    0% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(1.05); }
+    100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+.face-outline.capturing {
+    animation: pulse 0.5s ease-in-out;
+    border-color: #28a745;
+}
+</style>
+
+<script>
+let video = document.getElementById('video');
+let canvas = document.getElementById('canvas');
+let context = canvas.getContext('2d');
+let stream = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    playInstructionForStep('face_capture');
+    
+    // Open Camera
+    document.getElementById('openCameraBtn').addEventListener('click', function() {
+        openCamera();
+    });
+    
+    // Close Camera
+    document.getElementById('closeCameraBtn').addEventListener('click', function() {
+        closeCamera();
+    });
+    
+    // Capture Photo
+    document.getElementById('captureBtn').addEventListener('click', function() {
+        capturePhoto();
+    });
+    
+    // Retake Photo
+    document.getElementById('retakeBtn').addEventListener('click', function() {
+        retakePhoto();
+    });
+    
+    // File input change event
+    document.getElementById('id_face_image').addEventListener('change', function(e) {
+        if (e.target.files && e.target.files[0]) {
+            showFilePreview(e.target.files[0]);
+        }
+    });
+});
+
+async function openCamera() {
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({
+            video: { 
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                facingMode: 'user' // Use front camera for selfies
+            }
+        });
+        
+        video.srcObject = stream;
+        document.getElementById('cameraSection').style.display = 'block';
+        document.getElementById('previewSection').style.display = 'none';
+        
+        // Scroll to camera section
+        document.getElementById('cameraSection').scrollIntoView({ behavior: 'smooth' });
+        
+    } catch (error) {
+        console.error('Error accessing camera:', error);
+        alert('Camera access denied or not available. Please use file upload instead.');
+    }
+}
+
+function closeCamera() {
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+    }
+    document.getElementById('cameraSection').style.display = 'none';
+    video.srcObject = null;
+}
+
+function capturePhoto() {
+    // Add capturing animation
+    document.querySelector('.face-outline').classList.add('capturing');
+    
+    setTimeout(() => {
+        // Draw video frame to canvas
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Convert canvas to blob and create file
+        canvas.toBlob(function(blob) {
+            const file = new File([blob], 'face_photo.jpg', { type: 'image/jpeg' });
+            
+            // Create a new FileList containing our file
+            const fileList = new DataTransfer();
+            fileList.items.add(file);
+            document.getElementById('id_face_image').files = fileList.files;
+            
+            // Show preview
+            const preview = document.getElementById('preview');
+            preview.src = canvas.toDataURL();
+            document.getElementById('previewSection').style.display = 'block';
+            
+            // Hide camera, show retake button
+            document.getElementById('cameraSection').style.display = 'none';
+            document.getElementById('retakeBtn').style.display = 'inline-block';
+            
+            // Stop camera
+            closeCamera();
+            
+            // Remove animation class
+            document.querySelector('.face-outline').classList.remove('capturing');
+            
+            // Scroll to preview
+            document.getElementById('previewSection').scrollIntoView({ behavior: 'smooth' });
+            
+        }, 'image/jpeg', 0.9);
+    }, 500);
+}
+
+function retakePhoto() {
+    document.getElementById('previewSection').style.display = 'none';
+    document.getElementById('retakeBtn').style.display = 'none';
+    document.getElementById('id_face_image').value = '';
+    openCamera();
+}
+
+function showFilePreview(file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const preview = document.getElementById('preview');
+        preview.src = e.target.result;
+        document.getElementById('previewSection').style.display = 'block';
+        document.getElementById('retakeBtn').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+}
+
+// Clean up camera when page unloads
+window.addEventListener('beforeunload', function() {
+    closeCamera();
+});
+</script>
+
+{% endblock %}

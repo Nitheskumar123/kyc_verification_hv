@@ -1,0 +1,386 @@
+{% endblock %}
+
+<!-- templates/upload_status.html -->
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-list-alt text-success"></i> Upload Status</h2>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-primary" onclick="refreshStatus()">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+            <button class="btn btn-outline-danger" onclick="clearCompleted()">
+                <i class="fas fa-trash"></i> Clear Completed
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 id="totalUploads">0</h4>
+                            <p class="mb-0">Total Uploads</p>
+                        </div>
+                        <i class="fas fa-upload fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 id="queuedUploads">0</h4>
+                            <p class="mb-0">Queued</p>
+                        </div>
+                        <i class="fas fa-clock fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 id="completedUploads">0</h4>
+                            <p class="mb-0">Completed</p>
+                        </div>
+                        <i class="fas fa-check-circle fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 id="failedUploads">0</h4>
+                            <p class="mb-0">Failed</p>
+                        </div>
+                        <i class="fas fa-exclamation-circle fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Queue -->
+    <div class="card">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-queue"></i> Upload Queue</h5>
+                <span class="badge bg-primary" id="networkStatusBadge">
+                    <i class="fas fa-wifi"></i> Online
+                </span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div id="uploadList" class="list-group list-group-flush">
+                <!-- Upload items will be populated here -->
+            </div>
+            
+            <!-- Empty State -->
+            <div id="emptyState" class="text-center p-5">
+                <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">No uploads in queue</h5>
+                <p class="text-muted">Your uploaded documents and face verifications will appear here.</p>
+                <a href="{% url 'kyc_upload' %}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Start Upload
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.container-fluid { padding: 20px; }
+.card { border-radius: 12px; box-shadow: 0 2px 15px rgba(0,0,0,0.1); }
+.list-group-item { border-left: none; border-right: none; }
+.upload-item { transition: all 0.3s ease; }
+.upload-item:hover { background-color: #f8f9fa; }
+.status-queued { border-left: 4px solid #ffc107; }
+.status-uploading { border-left: 4px solid #007bff; }
+.status-completed { border-left: 4px solid #28a745; }
+.status-failed { border-left: 4px solid #dc3545; }
+.upload-thumbnail { width: 60px; height: 60px; object-fit: cover; border-radius: 8px; }
+.progress-small { height: 6px; }
+@media (max-width: 768px) { 
+    .container-fluid { padding: 10px; }
+    .col-md-3 { margin-bottom: 1rem; }
+}
+</style>
+
+<script>
+let uploadQueue = JSON.parse(localStorage.getItem('kycOfflineQueue') || '[]');
+let isOnline = navigator.onLine;
+
+// Network monitoring
+window.addEventListener('online', () => { isOnline = true; updateNetworkStatus(); processQueue(); });
+window.addEventListener('offline', () => { isOnline = false; updateNetworkStatus(); });
+
+function updateNetworkStatus() {
+    const badge = document.getElementById('networkStatusBadge');
+    if (isOnline) {
+        badge.innerHTML = '<i class="fas fa-wifi"></i> Online';
+        badge.className = 'badge bg-success';
+    } else {
+        badge.innerHTML = '<i class="fas fa-wifi-slash"></i> Offline';
+        badge.className = 'badge bg-danger';
+    }
+}
+
+function updateSummaryCards() {
+    const total = uploadQueue.length;
+    const queued = uploadQueue.filter(item => item.status === 'queued').length;
+    const completed = uploadQueue.filter(item => item.status === 'uploaded').length;
+    const failed = uploadQueue.filter(item => item.status === 'failed').length;
+
+    document.getElementById('totalUploads').textContent = total;
+    document.getElementById('queuedUploads').textContent = queued;
+    document.getElementById('completedUploads').textContent = completed;
+    document.getElementById('failedUploads').textContent = failed;
+}
+
+function renderUploadList() {
+    const listEl = document.getElementById('uploadList');
+    const emptyEl = document.getElementById('emptyState');
+
+    if (uploadQueue.length === 0) {
+        listEl.style.display = 'none';
+        emptyEl.style.display = 'block';
+        return;
+    }
+
+    listEl.style.display = 'block';
+    emptyEl.style.display = 'none';
+
+    listEl.innerHTML = uploadQueue.map(item => `
+        <div class="list-group-item upload-item status-${item.status}" data-id="${item.id}">
+            <div class="d-flex align-items-center">
+                <div class="flex-shrink-0 me-3">
+                    ${item.data.imageData ? 
+                        `<img src="${item.data.imageData}" class="upload-thumbnail" alt="Preview">` :
+                        `<div class="upload-thumbnail bg-light d-flex align-items-center justify-content-center">
+                            <i class="fas fa-${item.type === 'document' ? 'file-alt' : 'user-circle'} text-muted"></i>
+                        </div>`
+                    }
+                </div>
+                
+                <div class="flex-grow-1">
+                    <div class="d-flex justify-content-between align-items-start mb-1">
+                        <h6 class="mb-1">
+                            <i class="fas fa-${item.type === 'document' ? 'file-alt' : 'user-circle'} me-1"></i>
+                            ${item.type === 'document' ? 
+                                `Document - ${item.data.documentType || 'Unknown'}` : 
+                                'Face Verification'
+                            }
+                        </h6>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge ${getStatusBadgeClass(item.status)}">
+                                <i class="fas fa-${getStatusIcon(item.status)} me-1"></i>
+                                ${item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                            </span>
+                            ${item.status === 'failed' ? 
+                                `<button class="btn btn-sm btn-outline-primary" onclick="retryUpload('${item.id}')">
+                                    <i class="fas fa-redo"></i> Retry
+                                </button>` : ''
+                            }
+                            <button class="btn btn-sm btn-outline-danger" onclick="removeFromQueue('${item.id}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <small class="text-muted">
+                        <i class="fas fa-calendar-alt me-1"></i>
+                        ${new Date(item.timestamp).toLocaleString()}
+                    </small>
+                    
+                    ${item.status === 'uploading' ? 
+                        `<div class="progress progress-small mt-2">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 75%"></div>
+                        </div>` : ''
+                    }
+                    
+                    ${item.error ? 
+                        `<div class="alert alert-danger alert-sm mt-2 mb-0">
+                            <small><i class="fas fa-exclamation-triangle me-1"></i>${item.error}</small>
+                        </div>` : ''
+                    }
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+function getStatusBadgeClass(status) {
+    const classes = {
+        'queued': 'bg-warning text-dark',
+        'uploading': 'bg-primary',
+        'uploaded': 'bg-success',
+        'failed': 'bg-danger'
+    };
+    return classes[status] || 'bg-secondary';
+}
+
+function getStatusIcon(status) {
+    const icons = {
+        'queued': 'clock',
+        'uploading': 'spinner fa-spin',
+        'uploaded': 'check',
+        'failed': 'times'
+    };
+    return icons[status] || 'question';
+}
+
+async function processQueue() {
+    if (!isOnline || uploadQueue.filter(item => item.status === 'queued').length === 0) return;
+    
+    for (let item of uploadQueue.filter(item => item.status === 'queued')) {
+        item.status = 'uploading';
+        renderUploadList();
+        updateSummaryCards();
+        
+        try {
+            await uploadItem(item);
+            item.status = 'uploaded';
+            item.uploadedAt = new Date().toISOString();
+            showToast(`${item.type} uploaded successfully!`, 'success');
+        } catch (error) {
+            item.status = 'failed';
+            item.error = error.message;
+            showToast(`Failed to upload ${item.type}: ${error.message}`, 'error');
+        }
+        
+        // Update UI after each item
+        renderUploadList();
+        updateSummaryCards();
+        
+        // Save progress
+        localStorage.setItem('kycOfflineQueue', JSON.stringify(uploadQueue));
+        
+        // Small delay between uploads
+        await new Promise(resolve => setTimeout(resolve, 500));
+    }
+}
+
+async function uploadItem(item) {
+    const formData = new FormData();
+    
+    if (item.type === 'document') {
+        formData.append('document_type', item.data.documentType);
+        formData.append('camera_data', item.data.imageData);
+    } else if (item.type === 'face') {
+        formData.append('camera_data', item.data.imageData);
+    }
+    
+    const url = item.type === 'document' ? '/kyc-upload/' : '/face-verification/';
+    const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': getCsrfToken()
+        }
+    });
+    
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+    
+    return response.json();
+}
+
+function getCsrfToken() {
+    const token = document.querySelector('[name=csrfmiddlewaretoken]');
+    return token ? token.value : '';
+}
+
+function retryUpload(itemId) {
+    const item = uploadQueue.find(i => i.id == itemId);
+    if (item) {
+        item.status = 'queued';
+        item.error = null;
+        localStorage.setItem('kycOfflineQueue', JSON.stringify(uploadQueue));
+        renderUploadList();
+        updateSummaryCards();
+        
+        if (isOnline) {
+            processQueue();
+        }
+    }
+}
+
+function removeFromQueue(itemId) {
+    if (confirm('Are you sure you want to remove this item from the queue?')) {
+        uploadQueue = uploadQueue.filter(item => item.id != itemId);
+        localStorage.setItem('kycOfflineQueue', JSON.stringify(uploadQueue));
+        renderUploadList();
+        updateSummaryCards();
+        showToast('Item removed from queue', 'info');
+    }
+}
+
+function clearCompleted() {
+    if (confirm('Remove all completed uploads from the list?')) {
+        uploadQueue = uploadQueue.filter(item => item.status !== 'uploaded');
+        localStorage.setItem('kycOfflineQueue', JSON.stringify(uploadQueue));
+        renderUploadList();
+        updateSummaryCards();
+        showToast('Completed uploads cleared', 'info');
+    }
+}
+
+function refreshStatus() {
+    // Reload queue from localStorage in case it was updated elsewhere
+    uploadQueue = JSON.parse(localStorage.getItem('kycOfflineQueue') || '[]');
+    renderUploadList();
+    updateSummaryCards();
+    
+    // Try to process queue if online
+    if (isOnline) {
+        processQueue();
+    }
+    
+    showToast('Status refreshed', 'info');
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'info'} position-fixed top-0 start-50 translate-middle-x mt-3`;
+    toast.style.zIndex = '9999';
+    toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check' : type === 'error' ? 'times' : 'info'}-circle me-2"></i>${message}`;
+    
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+// Auto-refresh every 30 seconds
+setInterval(() => {
+    if (document.visibilityState === 'visible') {
+        refreshStatus();
+    }
+}, 30000);
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    updateNetworkStatus();
+    renderUploadList();
+    updateSummaryCards();
+    
+    // Auto-process queue if online
+    if (isOnline) {
+        setTimeout(processQueue, 1000);
+    }
+});
+</script>
+{% endblock %}
